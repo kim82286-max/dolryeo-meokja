@@ -1,0 +1,12 @@
+{
+  "name": "dolryeo-meokja",
+  "version": "1.0.0",
+  "description": "돌려먹자 - 주변 맛집 룰렛 웹앱",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
