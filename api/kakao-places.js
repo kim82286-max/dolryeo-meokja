@@ -35,13 +35,17 @@ export default async function handler(req, res) {
       params.append("page", page || "1");
       params.append("size", size || "15");
     } else if (type === "keyword") {
-      // 키워드 검색: "강남역 한식" 같은 검색
+      // 키워드 검색: "왕십리역" 같은 장소 검색
       url = "https://dapi.kakao.com/v2/local/search/keyword.json";
       params.append("query", query);
-      if (x) params.append("x", x);
-      if (y) params.append("y", y);
-      if (radius) params.append("radius", radius);
-      params.append("sort", "distance");
+      if (x && y) {
+        params.append("x", x);
+        params.append("y", y);
+        if (radius) params.append("radius", radius);
+        params.append("sort", "distance");
+      } else {
+        params.append("sort", "accuracy");
+      }
       params.append("page", page || "1");
       params.append("size", size || "15");
     } else {
