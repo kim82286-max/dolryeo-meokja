@@ -163,10 +163,36 @@ function LocationPicker({location,setLocation,coords,setCoords}){
   var _c=useState(""),customInput=_c[0],setCustomInput=_c[1];
   var _g=useState(false),gpsLoading=_g[0],setGpsLoading=_g[1];
   var _e=useState(""),gpsError=_e[0],setGpsError=_e[1];
+  var _sr=useState([]),searchResults=_sr[0],setSearchResults=_sr[1];
+  var _sl=useState(false),searching=_sl[0],setSearching=_sl[1];
   var panelRef=useRef(null);
+  var debounceRef=useRef(null);
+
   useEffect(function(){var handler=function(e){if(panelRef.current&&!panelRef.current.contains(e.target))setOpen(false);};if(open)document.addEventListener("mousedown",handler);return function(){document.removeEventListener("mousedown",handler);};},[open]);
+
+  // 입력할 때마다 자동검색 (디바운스 300ms)
+  useEffect(function(){
+    if(!customInput.trim()||customInput.trim().length<1){setSearchResults([]);return;}
+    if(debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current=setTimeout(function(){
+      setSearching(true);
+      fetch(API_BASE+"/api/kakao-places?type=keyword&query="+encodeURIComponent(customInput.trim())+"&size=5")
+        .then(function(r){return r.json();})
+        .then(function(data){
+          if(data.documents){
+            setSearchResults(data.documents.map(function(d){
+              return {name:d.place_name,address:d.road_address_name||d.address_name||"",x:parseFloat(d.x),y:parseFloat(d.y)};
+            }));
+          }
+          setSearching(false);
+        })
+        .catch(function(){setSearching(false);});
+    },300);
+    return function(){if(debounceRef.current)clearTimeout(debounceRef.current);};
+  },[customInput]);
+
   var handleGPS=function(){setGpsLoading(true);setGpsError("");if(!navigator.geolocation){setGpsError("GPS를 지원하지 않는 브라우저예요");setGpsLoading(false);return;}navigator.geolocation.getCurrentPosition(function(pos){setCoords({x:pos.coords.longitude,y:pos.coords.latitude});setLocation("현재 위치");setGpsLoading(false);setOpen(false);},function(err){setGpsError(err.code===1?"위치 권한을 허용해주세요":"위치를 가져올 수 없어요");setGpsLoading(false);},{enableHighAccuracy:true,timeout:8000});};
-  var handleCustom=function(){var v=customInput.trim();if(v){setLocation(v);setCustomInput("");setOpen(false);}};
+  var handleSelectResult=function(r){setLocation(r.name);setCoords({x:r.x,y:r.y});setCustomInput("");setSearchResults([]);setOpen(false);};
   var handlePreset=function(loc){setLocation(loc.label);setCoords({x:loc.x,y:loc.y});setOpen(false);};
 
   return React.createElement("div",{ref:panelRef,style:{position:"relative",marginBottom:10}},
@@ -175,13 +201,23 @@ function LocationPicker({location,setLocation,coords,setCoords}){
       React.createElement("span",{style:{color:"#2C2C2A",fontWeight:500,flex:1}},location),
       React.createElement("span",{style:{transform:open?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.2s",fontSize:10,color:"#B4B2A9"}},"\u25BC")),
     open&&React.createElement("div",{style:{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,background:"#fff",borderRadius:20,border:"1.5px solid #E8E7E1",padding:12,zIndex:50,animation:"fadeSlideUp 0.15s ease",boxShadow:"0 8px 24px rgba(0,0,0,0.08)"}},
+      // GPS 버튼
       React.createElement("button",{onClick:handleGPS,disabled:gpsLoading,style:{width:"100%",padding:"10px 14px",borderRadius:50,border:"1.5px solid #EEEDFE",background:"#FAFAFE",color:"#534AB7",fontSize:13,fontWeight:600,cursor:gpsLoading?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:10}},
         React.createElement("svg",{width:16,height:16,viewBox:"0 0 24 24",fill:"none",stroke:"#534AB7",strokeWidth:2},React.createElement("circle",{cx:12,cy:12,r:10}),React.createElement("circle",{cx:12,cy:12,r:3}),React.createElement("line",{x1:12,y1:2,x2:12,y2:6}),React.createElement("line",{x1:12,y1:18,x2:12,y2:22}),React.createElement("line",{x1:2,y1:12,x2:6,y2:12}),React.createElement("line",{x1:18,y1:12,x2:22,y2:12})),
         gpsLoading?"위치 찾는 중...":"현재 위치 사용하기"),
       gpsError&&React.createElement("div",{style:{fontSize:12,color:"#E24B4A",textAlign:"center",marginBottom:8}},gpsError),
-      React.createElement("div",{style:{display:"flex",gap:6,marginBottom:12}},
-        React.createElement("input",{value:customInput,onChange:function(e){setCustomInput(e.target.value);},onKeyDown:function(e){if(e.key==="Enter")handleCustom();},placeholder:"직접 입력 (예: 강남역)",style:{flex:1,padding:"9px 14px",borderRadius:50,border:"1.5px solid #E8E7E1",fontSize:12,outline:"none",color:"#2C2C2A",background:"#fff"}}),
-        React.createElement("button",{onClick:handleCustom,disabled:!customInput.trim(),style:{padding:"9px 16px",borderRadius:50,border:"none",background:customInput.trim()?"#534AB7":"#E8E7E1",color:customInput.trim()?"#fff":"#B4B2A9",fontSize:12,fontWeight:600,cursor:customInput.trim()?"pointer":"not-allowed",whiteSpace:"nowrap"}},"설정")),
+      // 검색 입력
+      React.createElement("div",{style:{position:"relative",marginBottom:searchResults.length>0?0:12}},
+        React.createElement("input",{value:customInput,onChange:function(e){setCustomInput(e.target.value);},placeholder:"장소 검색 (예: 왕십리역, 스타벅스)",autoFocus:true,style:{width:"100%",padding:"9px 14px",borderRadius:searchResults.length>0?"12px 12px 0 0":50,border:"1.5px solid #E8E7E1",fontSize:13,outline:"none",color:"#2C2C2A",background:"#fff",boxSizing:"border-box"}}),
+        searching&&React.createElement("div",{style:{position:"absolute",right:12,top:10,fontSize:11,color:"#B4B2A9"}},"검색 중...")),
+      // 자동완성 결과
+      searchResults.length>0&&React.createElement("div",{style:{border:"1.5px solid #E8E7E1",borderTop:"none",borderRadius:"0 0 12px 12px",marginBottom:12,overflow:"hidden"}},
+        searchResults.map(function(r,i){return React.createElement("button",{key:i,onClick:function(){handleSelectResult(r);},style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:"none",borderTop:i>0?"0.5px solid #F0EFE8":"none",background:"#fff",cursor:"pointer",textAlign:"left",width:"100%",transition:"background 0.1s"},onMouseEnter:function(e){e.currentTarget.style.background="#F9F8F5";},onMouseLeave:function(e){e.currentTarget.style.background="#fff";}},
+          React.createElement("svg",{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#534AB7",strokeWidth:2,style:{flexShrink:0}},React.createElement("path",{d:"M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"}),React.createElement("circle",{cx:12,cy:10,r:3})),
+          React.createElement("div",{style:{minWidth:0}},
+            React.createElement("div",{style:{fontSize:13,fontWeight:500,color:"#2C2C2A",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.name),
+            React.createElement("div",{style:{fontSize:11,color:"#B4B2A9",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.address)));})),
+      // 프리셋
       React.createElement("div",{style:{fontSize:11,color:"#B4B2A9",fontWeight:500,marginBottom:8,paddingLeft:4}},"자주 찾는 장소"),
       React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:2,maxHeight:200,overflowY:"auto"}},
         PRESET_LOCATIONS.map(function(loc,i){return React.createElement("button",{key:i,onClick:function(){handlePreset(loc);},style:{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:12,border:"none",background:location===loc.label?"#EEEDFE":"transparent",cursor:"pointer",textAlign:"left",width:"100%"}},
