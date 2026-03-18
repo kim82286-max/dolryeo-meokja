@@ -7,7 +7,6 @@ const API_BASE = "";  // same origin
 const FOOD_CATEGORIES=[{id:"all",label:"전체"},{id:"korean",label:"한식"},{id:"chinese",label:"중식"},{id:"japanese",label:"일식"},{id:"western",label:"양식"},{id:"chicken",label:"치킨"},{id:"pizza",label:"피자"},{id:"burger",label:"버거"},{id:"asian",label:"아시안"},{id:"bunsik",label:"분식"},{id:"meat",label:"고기/구이"},{id:"seafood",label:"해산물"}];
 const CAFE_CATEGORIES=[{id:"all",label:"전체"},{id:"coffee",label:"커피전문점"},{id:"dessert",label:"디저트카페"},{id:"bakery",label:"베이커리"},{id:"tea",label:"차/주스"}];
 const RADIUS_OPTIONS=[{value:50,label:"50m"},{value:100,label:"100m"},{value:200,label:"200m"},{value:300,label:"300m"},{value:500,label:"500m"},{value:700,label:"700m"},{value:1000,label:"1km"}];
-const PRICE_OPTIONS=[{id:"all",label:"전체",emoji:"💰"},{id:"low",label:"저가",emoji:"💸"},{id:"mid",label:"중간",emoji:"💵"},{id:"high",label:"고급",emoji:"💎"}];
 const FORTUNES=["오늘 메뉴는 너!","이거다! 오늘은 여기!","운명이 골라준 맛집!","딱 여기야, 가자!","오늘의 주인공은 바로...","배고픈 당신을 위해!","맛의 신이 점지했다!","여기 안 가면 손해!"];
 const CAFE_FORTUNES=["오늘의 힐링은 여기서!","카페인 충전 go!","달달한 오후, 여기로!","커피 한 잔의 행운!","감성 충전 스팟!"];
 const CUSTOM_FORTUNES=["룰렛의 선택은!","운명이 결정했다!","오늘은 이거다!","고민 끝! 결과는...","두구두구두구..."];
@@ -42,19 +41,10 @@ function mapCategory(cn){
   return "all";
 }
 
-function estimatePrice(categoryName, placeName){
-  if(!categoryName&&!placeName) return "mid";
-  var c=(categoryName+" "+placeName).toLowerCase();
-  // 고급
-  if(c.includes("오마카세")||c.includes("스테이크")||c.includes("코스요리")||c.includes("파인다이닝")||c.includes("한우")||c.includes("와규")||c.includes("랍스터")||c.includes("미슐랭")||c.includes("호텔")||c.includes("뷔페")) return "high";
-  // 저가
-  if(c.includes("분식")||c.includes("떡볶이")||c.includes("김밥")||c.includes("라면")||c.includes("백반")||c.includes("국밥")||c.includes("맥도날드")||c.includes("롯데리아")||c.includes("버거킹")||c.includes("메가커피")||c.includes("이디야")||c.includes("컴포즈")||c.includes("빽다방")||c.includes("편의점")||c.includes("노브랜드")) return "low";
-  return "mid";
-}
-
 async function fetchPlaces(type, x, y, radius) {
   const code = type === "cafe" ? "CE7" : "FD6";
   const all = [];
+  const EXCLUDE_KEYWORDS = ["직원식당","구내식당","학생식당","사원식당","교직원식당","급식","매점","푸드코트","단체급식","기관식당","위탁급식","급식소","기업체식당","사내식당","복지관식당","병원식당","군부대","기숙사식당"];
   for (let page = 1; page <= 3; page++) {
     try {
       const res = await fetch(`${API_BASE}/api/kakao-places?type=category&category_group_code=${code}&x=${x}&y=${y}&radius=${radius}&page=${page}&size=15`);
@@ -64,10 +54,13 @@ async function fetchPlaces(type, x, y, radius) {
       if (data.meta?.is_end) break;
     } catch (e) { console.error("API error:", e); break; }
   }
-  return all.map((d, i) => ({
+  return all.filter(function(d){
+    var name = (d.place_name||"").toLowerCase();
+    var cat = (d.category_name||"").toLowerCase();
+    return !EXCLUDE_KEYWORDS.some(function(kw){ return name.includes(kw)||cat.includes(kw); });
+  }).map((d, i) => ({
     id: d.id || `p-${i}`, name: d.place_name || "이름 없음",
     category: mapCategory(d.category_name), categoryName: d.category_name || "",
-    priceRange: estimatePrice(d.category_name, d.place_name),
     distance: parseInt(d.distance) || 0, address: d.road_address_name || d.address_name || "",
     phone: d.phone || "", placeUrl: d.place_url || "", x: d.x, y: d.y,
   }));
@@ -238,7 +231,7 @@ function LocationPicker({location,setLocation,coords,setCoords}){
 }
 
 /* ═══ FILTERS ═══ */
-function FiltersSection({tab,radius,setRadius,excludedCategories,setExcludedCategories,priceRange,setPriceRange,location,setLocation,showFilters,setShowFilters,coords,setCoords}){
+function FiltersSection({tab,radius,setRadius,excludedCategories,setExcludedCategories,location,setLocation,showFilters,setShowFilters,coords,setCoords}){
   var cats=tab==="restaurant"?FOOD_CATEGORIES:CAFE_CATEGORIES;
   var toggle=function(id){if(id==="all"){setExcludedCategories(new Set());return;}setExcludedCategories(function(p){var n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});};
   return React.createElement(React.Fragment,null,
@@ -252,9 +245,6 @@ function FiltersSection({tab,radius,setRadius,excludedCategories,setExcludedCate
       React.createElement("div",{style:{marginBottom:14}},
         React.createElement("div",{style:{fontSize:12,color:"#888780",marginBottom:8,fontWeight:600}},"반경 거리"),
         React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},RADIUS_OPTIONS.map(function(r){return React.createElement(FilterChip,{key:r.value,selected:radius===r.value,onClick:function(){setRadius(r.value);}},r.label);}))),
-      React.createElement("div",{style:{marginBottom:14}},
-        React.createElement("div",{style:{fontSize:12,color:"#888780",marginBottom:8,fontWeight:600}},"가격대"),
-        React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},PRICE_OPTIONS.map(function(p){return React.createElement(FilterChip,{key:p.id,selected:priceRange===p.id,onClick:function(){setPriceRange(p.id);}},p.emoji+" "+p.label);}))),
       React.createElement("div",null,
         React.createElement("div",{style:{fontSize:12,color:"#888780",marginBottom:8,fontWeight:600}},"카테고리"),
         React.createElement("div",{style:{display:"flex",gap:6,marginBottom:8}},
@@ -350,7 +340,6 @@ function App(){
   var _t=useState("restaurant"),mainTab=_t[0],setMainTab=_t[1];
   var _r=useState(500),radius=_r[0],setRadius=_r[1];
   var _ex=useState(new Set()),excludedCategories=_ex[0],setExcludedCategories=_ex[1];
-  var _pr=useState("all"),priceRange=_pr[0],setPriceRange=_pr[1];
   var _sp=useState(false),spinning=_sp[0],setSpinning=_sp[1];
   var _w=useState(null),winner=_w[0],setWinner=_w[1];
   var _o=useState(false),showOverlay=_o[0],setShowOverlay=_o[1];
@@ -378,11 +367,11 @@ function App(){
   },[coords.x,coords.y,radius,mainTab,refreshKey]);
 
   var placeTab=mainTab==="restaurant"||mainTab==="cafe"?mainTab:"restaurant";
-  var filteredPlaces=(allPlaces[placeTab]||[]).filter(function(p){if(excludedCategories.has(p.category))return false;if(priceRange!=="all"&&p.priceRange!==priceRange)return false;return true;});
+  var filteredPlaces=(allPlaces[placeTab]||[]).filter(function(p){return !excludedCategories.has(p.category);});
   var rouletteItems=filteredPlaces.slice(0,12);
   var resetState=function(){setWinner(null);setShowOverlay(false);setFortune("");setCharMood("default");setSpinning(false);};
-  var onTabChange=function(t){setMainTab(t);resetState();setExcludedCategories(new Set());setPriceRange("all");};
-  var filterProps={tab:placeTab,radius:radius,setRadius:setRadius,excludedCategories:excludedCategories,setExcludedCategories:setExcludedCategories,priceRange:priceRange,setPriceRange:setPriceRange,location:location,setLocation:setLocation,showFilters:showFilters,setShowFilters:setShowFilters,coords:coords,setCoords:setCoords};
+  var onTabChange=function(t){setMainTab(t);resetState();setExcludedCategories(new Set());};
+  var filterProps={tab:placeTab,radius:radius,setRadius:setRadius,excludedCategories:excludedCategories,setExcludedCategories:setExcludedCategories,location:location,setLocation:setLocation,showFilters:showFilters,setShowFilters:setShowFilters,coords:coords,setCoords:setCoords};
   var rouletteProps={rouletteItems:rouletteItems,filteredPlaces:filteredPlaces,spinning:spinning,setSpinning:setSpinning,winner:winner,setWinner:setWinner,showOverlay:showOverlay,setShowOverlay:setShowOverlay,fortune:fortune,setFortune:setFortune,charMood:charMood,setCharMood:setCharMood,tab:placeTab,filterProps:filterProps,loading:loading,onRefresh:onRefresh};
 
   var tabs=[{id:"restaurant",label:"\uD83C\uDF7D 음식점"},{id:"cafe",label:"\u2615 카페"},{id:"custom",label:"\u270F\uFE0F 직접 입력"}];
