@@ -44,7 +44,7 @@ function mapCategory(cn){
 async function fetchPlaces(type, x, y, radius) {
   const code = type === "cafe" ? "CE7" : "FD6";
   const all = [];
-  const EXCLUDE_KEYWORDS = ["직원식당","구내식당","학생식당","사원식당","교직원식당","급식","매점","푸드코트","단체급식","기관식당","위탁급식","급식소","기업체식당","사내식당","복지관식당","병원식당","군부대","기숙사식당"];
+  const EXCLUDE_KEYWORDS = ["직원식당","구내식당","학생식당","사원식당","교직원식당","급식","매점","푸드코트","단체급식","기관식당","위탁급식","급식소","기업체식당","사내식당","복지관식당","병원식당","군부대","기숙사식당","파리바게뜨","파리바게트","뚜레주르","성심당","브레드","베이커리","제과점","제과","빵집","던킨","크리스피크림"];
   for (let page = 1; page <= 3; page++) {
     try {
       const res = await fetch(`${API_BASE}/api/kakao-places?type=category&category_group_code=${code}&x=${x}&y=${y}&radius=${radius}&page=${page}&size=15`);
