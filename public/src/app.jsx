@@ -63,7 +63,26 @@ async function fetchPlaces(type, x, y, radius) {
     category: mapCategory(d.category_name), categoryName: d.category_name || "",
     distance: parseInt(d.distance) || 0, address: d.road_address_name || d.address_name || "",
     phone: d.phone || "", placeUrl: d.place_url || "", x: d.x, y: d.y,
+    blogCount: 0, verified: false,
   }));
+}
+
+/* 블로그 리뷰 수 검증 — 각 장소에 대해 네이버 블로그 검색 */
+async function verifyPlaces(places) {
+  var BLOG_THRESHOLD = 30;
+  var verified = [];
+  for (var i = 0; i < places.length; i++) {
+    try {
+      var res = await fetch(API_BASE + "/api/naver-blog?query=" + encodeURIComponent(places[i].name));
+      if (res.ok) {
+        var data = await res.json();
+        places[i].blogCount = data.totalBlogs || 0;
+        places[i].verified = places[i].blogCount >= BLOG_THRESHOLD;
+      }
+    } catch (e) { /* skip */ }
+    verified.push(places[i]);
+  }
+  return verified;
 }
 
 /* ═══ CHARACTERS ═══ */
@@ -255,7 +274,7 @@ function FiltersSection({tab,radius,setRadius,excludedCategories,setExcludedCate
 }
 
 /* ═══ PLACE ROULETTE ═══ */
-function PlaceRoulette({rouletteItems,filteredPlaces,spinning,setSpinning,winner,setWinner,showOverlay,setShowOverlay,fortune,setFortune,charMood,setCharMood,tab,filterProps,loading,onRefresh}){
+function PlaceRoulette({rouletteItems,filteredPlaces,spinning,setSpinning,winner,setWinner,showOverlay,setShowOverlay,fortune,setFortune,charMood,setCharMood,tab,filterProps,loading,onRefresh,verifiedMode,setVerifiedMode,verifying}){
   var spin=function(){if(rouletteItems.length<2)return;setWinner(null);setShowOverlay(false);setCharMood("pushing");var f=tab==="restaurant"?FORTUNES:CAFE_FORTUNES;setFortune(f[Math.floor(Math.random()*f.length)]);setSpinning(true);};
   var stop=function(){setSpinning(false);};
   var onWin=function(w){setWinner(w);setShowOverlay(true);setCharMood("excited");};
@@ -267,6 +286,17 @@ function PlaceRoulette({rouletteItems,filteredPlaces,spinning,setSpinning,winner
     React.createElement("div",{style:{textAlign:"center",padding:"20px 0 8px"}},
       React.createElement("h1",{style:{fontSize:22,fontWeight:700,color:"#2C2C2A",margin:0}},tab==="restaurant"?"오늘 뭐 먹지?":"어디서 마실까?"),
       React.createElement("p",{style:{fontSize:13,color:"#888780",margin:"2px 0 0"}},"고민은 룰렛에게 맡기세요")),
+    // 검증된 맛집 토글
+    React.createElement("div",{onClick:function(){setVerifiedMode(!verifiedMode);},style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:verifiedMode?"#EEEDFE":"#F9F8F5",borderRadius:50,marginBottom:10,cursor:"pointer",border:verifiedMode?"1.5px solid #AFA9EC":"1.5px solid transparent",transition:"all 0.2s"}},
+      React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},
+        React.createElement("svg",{width:16,height:16,viewBox:"0 0 24 24",fill:verifiedMode?"#534AB7":"none",stroke:verifiedMode?"#534AB7":"#888",strokeWidth:2},React.createElement("path",{d:"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"})),
+        React.createElement("span",{style:{fontSize:13,fontWeight:500,color:verifiedMode?"#534AB7":"#2C2C2A"}},"검증된 맛집만"),
+        verifying&&React.createElement("span",{style:{fontSize:11,color:"#B4B2A9"}},"(검증 중...)")),
+      React.createElement("div",{style:{width:44,height:24,borderRadius:12,background:verifiedMode?"#534AB7":"#D3D1C7",position:"relative",transition:"background 0.2s"}},
+        React.createElement("div",{style:{width:20,height:20,borderRadius:"50%",background:"#fff",position:"absolute",top:2,left:verifiedMode?22:2,transition:"left 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.15)"}}))),
+    verifiedMode&&React.createElement("div",{style:{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",background:"#EEEDFE",borderRadius:12,marginBottom:10,fontSize:12,color:"#534AB7"}},
+      React.createElement("svg",{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#534AB7",strokeWidth:2},React.createElement("path",{d:"M22 11.08V12a10 10 0 1 1-5.93-9.14"}),React.createElement("polyline",{points:"22 4 12 14.01 9 11.01"})),
+      "블로그 리뷰 30건 이상인 곳만 표시돼요"),
     React.createElement(FiltersSection,filterProps),
     loading?React.createElement("div",{style:{textAlign:"center",padding:"3rem 1rem"}},
       React.createElement("div",{style:{animation:"wiggle 0.6s ease infinite",display:"inline-block"}},React.createElement(CharArms,{mood:"default",size:90})),
@@ -351,6 +381,8 @@ function App(){
   var _cm=useState("default"),charMood=_cm[0],setCharMood=_cm[1];
   var _ld=useState(false),loading=_ld[0],setLoading=_ld[1];
   var _rk=useState(0),refreshKey=_rk[0],setRefreshKey=_rk[1];
+  var _vm=useState(false),verifiedMode=_vm[0],setVerifiedMode=_vm[1];
+  var _vl=useState(false),verifying=_vl[0],setVerifying=_vl[1];
 
   var onRefresh=function(){setRefreshKey(function(k){return k+1;});resetState();};
 
@@ -359,20 +391,29 @@ function App(){
     var placeTab=mainTab==="restaurant"||mainTab==="cafe"?mainTab:"restaurant";
     setLoading(true);
     fetchPlaces(placeTab,coords.x,coords.y,radius).then(function(data){
-      // 셔플해서 매번 다른 12개가 룰렛에 나오도록
       var shuffled=data.sort(function(){return Math.random()-0.5;});
       setAllPlaces(function(prev){var next={};next[placeTab]=shuffled;return Object.assign({},prev,next);});
       setLoading(false);
+      // 블로그 검증 (백그라운드에서 진행)
+      setVerifying(true);
+      verifyPlaces(shuffled).then(function(verified){
+        setAllPlaces(function(prev){var next={};next[placeTab]=verified;return Object.assign({},prev,next);});
+        setVerifying(false);
+      });
     });
   },[coords.x,coords.y,radius,mainTab,refreshKey]);
 
   var placeTab=mainTab==="restaurant"||mainTab==="cafe"?mainTab:"restaurant";
-  var filteredPlaces=(allPlaces[placeTab]||[]).filter(function(p){return !excludedCategories.has(p.category);});
+  var filteredPlaces=(allPlaces[placeTab]||[]).filter(function(p){
+    if(excludedCategories.has(p.category)) return false;
+    if(verifiedMode && !p.verified) return false;
+    return true;
+  });
   var rouletteItems=filteredPlaces.slice(0,12);
   var resetState=function(){setWinner(null);setShowOverlay(false);setFortune("");setCharMood("default");setSpinning(false);};
   var onTabChange=function(t){setMainTab(t);resetState();setExcludedCategories(new Set());};
   var filterProps={tab:placeTab,radius:radius,setRadius:setRadius,excludedCategories:excludedCategories,setExcludedCategories:setExcludedCategories,location:location,setLocation:setLocation,showFilters:showFilters,setShowFilters:setShowFilters,coords:coords,setCoords:setCoords};
-  var rouletteProps={rouletteItems:rouletteItems,filteredPlaces:filteredPlaces,spinning:spinning,setSpinning:setSpinning,winner:winner,setWinner:setWinner,showOverlay:showOverlay,setShowOverlay:setShowOverlay,fortune:fortune,setFortune:setFortune,charMood:charMood,setCharMood:setCharMood,tab:placeTab,filterProps:filterProps,loading:loading,onRefresh:onRefresh};
+  var rouletteProps={rouletteItems:rouletteItems,filteredPlaces:filteredPlaces,spinning:spinning,setSpinning:setSpinning,winner:winner,setWinner:setWinner,showOverlay:showOverlay,setShowOverlay:setShowOverlay,fortune:fortune,setFortune:setFortune,charMood:charMood,setCharMood:setCharMood,tab:placeTab,filterProps:filterProps,loading:loading,onRefresh:onRefresh,verifiedMode:verifiedMode,setVerifiedMode:setVerifiedMode,verifying:verifying};
 
   var tabs=[{id:"restaurant",label:"\uD83C\uDF7D 음식점"},{id:"cafe",label:"\u2615 카페"},{id:"custom",label:"\u270F\uFE0F 직접 입력"}];
 
