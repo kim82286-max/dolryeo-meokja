@@ -409,17 +409,13 @@ function App(){
     if(verifiedMode && !p.verified) return false;
     return true;
   });
-  // 페이지 기반으로 12개씩 순환
+  // 페이지 기반으로 12개씩 순환 (중복 없이)
   var totalFiltered=filteredPlaces.length;
-  var startIdx=(pageIndex*12)%Math.max(totalFiltered,1);
-  var rouletteItems=[];
-  if(totalFiltered>0){
-    for(var ri=0;ri<Math.min(12,totalFiltered);ri++){
-      rouletteItems.push(filteredPlaces[(startIdx+ri)%totalFiltered]);
-    }
-  }
-  var totalPages=Math.ceil(totalFiltered/12);
-  var currentPage=(pageIndex%Math.max(totalPages,1))+1;
+  var totalPages=Math.max(Math.ceil(totalFiltered/12),1);
+  var safePage=pageIndex%totalPages;
+  var startIdx=safePage*12;
+  var rouletteItems=filteredPlaces.slice(startIdx,startIdx+12);
+  var currentPage=safePage+1;
   var resetState=function(){setWinner(null);setShowOverlay(false);setFortune("");setCharMood("default");setSpinning(false);};
   var onTabChange=function(t){setMainTab(t);resetState();setExcludedCategories(new Set());};
   var filterProps={tab:placeTab,radius:radius,setRadius:setRadius,excludedCategories:excludedCategories,setExcludedCategories:setExcludedCategories,location:location,setLocation:setLocation,showFilters:showFilters,setShowFilters:setShowFilters,coords:coords,setCoords:setCoords};
