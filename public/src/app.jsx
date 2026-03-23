@@ -35,7 +35,7 @@ const PRESET_LOCATIONS=[
 
 /* ── 내가 아는 맛집 목록 (위치별) ── */
 const MY_PICKS={
-  "을지로입구역":["pasta ta ta"],
+  "을지로입구역":["pasta ta ta","몽중헌","타마고"],
   "을지로3가역":["오봉집"],
   "군자역":["후룩 누들바 군자"],
   "신당역":["하오카오스탠 신당점","이공김밥 신당점","표주","신당동천팥죽"],
@@ -51,7 +51,15 @@ const MY_PICKS={
 
 /* 내 맛집 목록을 카카오 API로 검색해서 위치정보 가져오기 */
 async function fetchMyPicks(locationLabel) {
-  var picks = MY_PICKS[locationLabel];
+  // "신당역 2호선" → "신당역" 포함 여부로 매칭
+  var picks = null;
+  var keys = Object.keys(MY_PICKS);
+  for (var k = 0; k < keys.length; k++) {
+    if (locationLabel.includes(keys[k]) || keys[k].includes(locationLabel)) {
+      picks = MY_PICKS[keys[k]];
+      break;
+    }
+  }
   if (!picks || picks.length === 0) return [];
   var results = [];
   for (var i = 0; i < picks.length; i++) {
